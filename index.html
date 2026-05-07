@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Observatorio Urbano de Movilidad y Sustentabilidad</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: Inter, sans-serif; background-color: #f8fafc; }
+    .glass-card { background: rgba(255,255,255,.95); backdrop-filter: blur(10px); border: 1px solid rgba(226,232,240,.8); box-shadow: 0 4px 6px -1px rgba(0,0,0,.05), 0 2px 4px -1px rgba(0,0,0,.03); }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    .insight-wrap { position: relative; overflow: visible !important; }
+    .insight-btn { position:absolute; top:12px; right:12px; width:30px; height:30px; border-radius:9999px; border:1px solid rgba(253,230,138,.95); background:rgba(255,251,235,.96); color:#b45309; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.22s ease; z-index:50; }
+    .insight-btn:hover { background:rgba(254,243,199,.98); transform:scale(1.05); }
+    .insight-pop { position:absolute; right:12px; top:48px; width:min(340px, calc(100vw - 48px)); background:rgba(15,23,42,.82); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); color:#f8fafc; border:1px solid rgba(255,255,255,.10); border-radius:14px; padding:13px 15px; box-shadow:0 22px 48px rgba(15,23,42,.34); font-size:12px; line-height:1.48; opacity:0; pointer-events:none; transform:translateY(-6px) scale(.985); transition:opacity .22s ease, transform .22s ease; transition-delay:0s; z-index:9999; }
+    .insight-btn:hover + .insight-pop, .insight-btn:focus-visible + .insight-pop, .insight-pop:hover { opacity:1; pointer-events:auto; transform:translateY(0) scale(1); transition-delay:.32s; }
+    .refresh-chip { display:inline-flex; align-items:center; gap:8px; border:1px solid #e2e8f0; background:#f8fafc; color:#475569; border-radius:9999px; padding:8px 12px; font-size:12px; font-weight:600; }
+  </style>
+</head>
+<body class="text-slate-800 h-screen flex overflow-hidden">
+  <aside class="w-80 bg-white border-r border-slate-200 flex flex-col h-full shadow-sm z-10 hidden md:flex">
+    <div class="p-6 border-b border-slate-100 bg-slate-50">
+      <h1 class="text-xl font-bold text-slate-800 leading-tight">Observatorio Urbano</h1>
+      <p class="text-sm text-slate-500 mt-1"><i class="fa-solid fa-location-dot mr-1"></i> Delicias, Chihuahua</p>
+    </div>
+    <div class="p-6 flex-1 overflow-y-auto custom-scrollbar">
+      <h2 class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Filtros de análisis</h2>
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-slate-700 mb-2"><i class="fa-regular fa-calendar mr-2 text-indigo-500"></i>Período (Años)</label>
+        <div id="filter-years" class="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100"></div>
+      </div>
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-slate-700 mb-2"><i class="fa-solid fa-car-side mr-2 text-emerald-500"></i>Medios de transporte</label>
+        <div id="filter-modes" class="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100"></div>
+      </div>
+      <div class="mb-6">
+        <label class="block text-sm font-semibold text-slate-700 mb-2"><i class="fa-solid fa-arrows-left-right mr-2 text-sky-500"></i>Sentido del desplazamiento</label>
+        <div id="filter-directions" class="space-y-2 bg-slate-50 p-3 rounded-lg border border-slate-100"></div>
+      </div>
+      <button onclick="resetFilters()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-sm font-medium rounded-lg transition-colors">Restablecer filtros</button>
+    </div>
+  </aside>
+
+  <main class="flex-1 flex flex-col h-full overflow-hidden bg-slate-50/50">
+    <header class="bg-white border-b border-slate-200 p-5 lg:px-8 flex items-start gap-4 shadow-sm">
+      <div class="bg-blue-50 text-blue-600 p-3 rounded-lg hidden sm:block">
+        <i class="fa-solid fa-city text-2xl"></i>
+      </div>
+      <div>
+        <h2 class="text-lg font-bold text-slate-800">Observatorio Urbano de Movilidad y Sustentabilidad</h2>
+        <p class="text-sm text-slate-600 mt-1 leading-relaxed max-w-5xl">Tablero técnico para monitorear desplazamientos, kilómetros recorridos, emisiones de CO2, intensidad modal y desempeño territorial del sistema de movilidad.</p>
+      </div>
+    </header>
+
+    <div class="flex-1 overflow-y-auto custom-scrollbar p-5 lg:p-8">
+      <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-6">
+        <div class="refresh-chip"><i class="fa-solid fa-link"></i><span>Sincronizado con Google Sheets publicado</span></div>
+        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+          <label class="refresh-chip cursor-pointer"><input id="auto-refresh-toggle" type="checkbox" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" checked><span>Actualización automática cada 5 min</span></label>
+          <button id="refresh-now-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors"><i class="fa-solid fa-rotate mr-2"></i>Actualizar ahora</button>
+          <div class="refresh-chip"><i class="fa-regular fa-clock"></i><span>Última actualización: <span id="last-updated">—</span></span></div>
+        </div>
+      </div>
+      <div class="mb-4 text-xs text-slate-500">Diagnóstico rápido: <span id="deploy-status" class="font-semibold text-slate-700">Inicializando</span></div>
+      <div id="loading" class="flex flex-col items-center justify-center py-20">
+        <i class="fa-solid fa-circle-notch fa-spin text-4xl text-indigo-500 mb-4"></i>
+        <p class="text-slate-500 font-medium">Cargando y procesando datos...</p>
+      </div>
+
+      <div id="dashboard-content" class="hidden space-y-6">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div class="glass-card p-5 rounded-xl border-l-4 border-l-indigo-500 relative overflow-hidden">
+            <div class="relative z-10">
+              <p class="text-sm text-slate-500 font-medium">Total de Desplazamientos</p>
+              <h3 id="kpi-viajes" class="text-3xl font-bold text-slate-800 mt-1 truncate">0</h3>
+              <p class="text-xs text-slate-400 mt-2">Desplazamientos realizados en el periodo</p>
+            </div>
+            <i class="fa-solid fa-route absolute right-[-10px] bottom-[-10px] text-7xl text-indigo-50 opacity-50 z-0"></i>
+          </div>
+          <div class="glass-card p-5 rounded-xl border-l-4 border-l-amber-500 relative overflow-hidden">
+            <div class="relative z-10">
+              <p class="text-sm text-slate-500 font-medium">Kilómetros Recorridos</p>
+              <h3 id="kpi-km" class="text-3xl font-bold text-slate-800 mt-1 truncate">0 <span class="text-lg font-normal text-slate-500">km</span></h3>
+              <p class="text-xs text-slate-400 mt-2">Distancia total acumulada</p>
+            </div>
+            <i class="fa-solid fa-road absolute right-[-10px] bottom-[-10px] text-7xl text-amber-50 opacity-50 z-0"></i>
+          </div>
+          <div class="glass-card p-5 rounded-xl border-l-4 border-l-rose-500 relative overflow-hidden">
+            <div class="relative z-10">
+              <p class="text-sm text-slate-500 font-medium">Emisiones de CO2</p>
+              <h3 id="kpi-co2" class="text-3xl font-bold text-slate-800 mt-1 truncate">0 <span class="text-lg font-normal text-slate-500">Ton</span></h3>
+              <p class="text-xs text-slate-400 mt-2">Huella de carbono estimada</p>
+            </div>
+            <i class="fa-solid fa-cloud-meatball absolute right-[-10px] bottom-[-10px] text-7xl text-rose-50 opacity-50 z-0"></i>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2">Análisis técnico de variables</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="glass-card rounded-xl p-4 flex gap-4">
+              <div class="bg-indigo-100 text-indigo-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-bus text-xl"></i></div>
+              <div class="min-w-0">
+                <h4 class="font-bold text-slate-800">Medios y combustibles</h4>
+                <p class="text-sm text-slate-600 mt-1 leading-snug">Los vehículos motorizados de combustión interna son la principal fuente directa. Modos no motorizados mitigan el impacto climático.</p>
+                <div class="mt-2 text-xs font-semibold text-indigo-600 bg-indigo-50 inline-block px-2 py-1 rounded truncate max-w-full">Modo dominante (desplazamientos): <span id="txt-modo-dominante">...</span></div>
+              </div>
+            </div>
+            <div class="glass-card rounded-xl p-4 flex gap-4">
+              <div class="bg-sky-100 text-sky-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-arrows-left-right text-xl"></i></div>
+              <div class="min-w-0">
+                <h4 class="font-bold text-slate-800">Dirección de los flujos</h4>
+                <p class="text-sm text-slate-600 mt-1 leading-snug">Analizar si el desplazamiento es de entrada o salida permite entender la relación funcional de Delicias con su periferia y su rol como atractor.</p>
+                <div class="mt-2 text-xs font-semibold text-sky-600 bg-sky-50 inline-block px-2 py-1 rounded mb-1 truncate max-w-full">Flujo dominante: <span id="txt-flujo-principal">...</span></div>
+              </div>
+            </div>
+            <div class="glass-card rounded-xl p-4 flex gap-4">
+              <div class="bg-emerald-100 text-emerald-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-route text-xl"></i></div>
+              <div class="min-w-0">
+                <h4 class="font-bold text-slate-800">Volumen de desplazamientos</h4>
+                <p class="text-sm text-slate-600 mt-1 leading-snug">Refleja la presión sobre la infraestructura vial. Aunque la distancia sea corta, un alto volumen motorizado incrementa la congestión urbana.</p>
+                <div class="mt-2 text-xs font-semibold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded truncate max-w-full">Promedio distancia / desplazamiento: <span id="txt-promedio-km">...</span> km</div>
+              </div>
+            </div>
+            <div class="glass-card rounded-xl p-4 flex gap-4">
+              <div class="bg-rose-100 text-rose-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-leaf text-xl"></i></div>
+              <div class="min-w-0">
+                <h4 class="font-bold text-slate-800">Eficiencia de emisiones</h4>
+                <p class="text-sm text-slate-600 mt-1 leading-snug">Relaciona el CO2 emitido con la cantidad de desplazamientos. Ayuda a identificar qué medios generan menor huella por usuario.</p>
+                <div class="mt-2 text-xs font-semibold text-rose-600 bg-rose-50 inline-block px-2 py-1 rounded truncate max-w-full">CO2 / millón de desplazamientos: <span id="txt-co2-por-viaje">...</span> Ton</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="text-lg font-bold mb-4 text-slate-800 border-b pb-2">Indicadores de observatorio</h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="glass-card p-5 rounded-xl"><p class="text-sm text-slate-500 font-medium">Índice de movilidad activa</p><h3 id="kpi-activa" class="text-2xl font-bold text-slate-800 mt-1">0%</h3><p class="text-xs text-slate-400 mt-2">Pie + bicicleta sobre el total</p></div>
+            <div class="glass-card p-5 rounded-xl"><p class="text-sm text-slate-500 font-medium">CO2 por 1,000 viajes</p><h3 id="kpi-co2-mil" class="text-2xl font-bold text-slate-800 mt-1">0</h3><p class="text-xs text-slate-400 mt-2">Intensidad media de emisiones</p></div>
+            <div class="glass-card p-5 rounded-xl"><p class="text-sm text-slate-500 font-medium">Balance entrada / salida</p><h3 id="kpi-balance" class="text-2xl font-bold text-slate-800 mt-1">0</h3><p class="text-xs text-slate-400 mt-2">Atractividad funcional</p></div>
+            <div class="glass-card p-5 rounded-xl"><p class="text-sm text-slate-500 font-medium">Presión vial motorizada</p><h3 id="kpi-presion" class="text-2xl font-bold text-slate-800 mt-1">0%</h3><p class="text-xs text-slate-400 mt-2">Automóvil + moto + autobús</p></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="glass-card rounded-xl p-4 flex gap-4"><div class="bg-indigo-100 text-indigo-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-seedling text-xl"></i></div><div class="min-w-0"><h4 class="font-bold text-slate-800">Accesibilidad urbana</h4><p class="text-sm text-slate-600 mt-1 leading-snug">Lectura sintética de qué tan bien conectan los desplazamientos con el acceso a oportunidades urbanas.</p><div class="mt-2 text-xs font-semibold text-indigo-600 bg-indigo-50 inline-block px-2 py-1 rounded truncate max-w-full">Índice combinado: <span id="txt-accesibilidad">...</span></div></div></div>
+          <div class="glass-card rounded-xl p-4 flex gap-4"><div class="bg-emerald-100 text-emerald-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-bicycle text-xl"></i></div><div class="min-w-0"><h4 class="font-bold text-slate-800">Movilidad activa</h4><p class="text-sm text-slate-600 mt-1 leading-snug">Resume la proporción de viajes no motorizados y su aporte a la salud, la habitabilidad y las emisiones.</p><div class="mt-2 text-xs font-semibold text-emerald-600 bg-emerald-50 inline-block px-2 py-1 rounded truncate max-w-full">Participación activa: <span id="txt-activa">...</span></div></div></div>
+          <div class="glass-card rounded-xl p-4 flex gap-4"><div class="bg-sky-100 text-sky-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-chart-line text-xl"></i></div><div class="min-w-0"><h4 class="font-bold text-slate-800">Desacople ambiental</h4><p class="text-sm text-slate-600 mt-1 leading-snug">Compara si los viajes crecen más rápido que el CO2 o si existe una mejora relativa del sistema.</p><div class="mt-2 text-xs font-semibold text-sky-600 bg-sky-50 inline-block px-2 py-1 rounded truncate max-w-full">Índice CO2 / viajes: <span id="txt-desacople">...</span></div></div></div>
+          <div class="glass-card rounded-xl p-4 flex gap-4"><div class="bg-rose-100 text-rose-600 w-12 h-12 rounded-lg flex items-center justify-center shrink-0"><i class="fa-solid fa-scale-balanced text-xl"></i></div><div class="min-w-0"><h4 class="font-bold text-slate-800">Equilibrio territorial</h4><p class="text-sm text-slate-600 mt-1 leading-snug">Explora si el sistema urbano atrae viajes, los expulsa o se mantiene balanceado entre ambos sentidos.</p><div class="mt-2 text-xs font-semibold text-rose-600 bg-rose-50 inline-block px-2 py-1 rounded truncate max-w-full">Saldo funcional: <span id="txt-balance">...</span></div></div></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="glass-card rounded-xl p-5 shadow-sm lg:col-span-1 flex flex-col">
+            <div class="mb-4 shrink-0"><h3 class="font-bold text-slate-800">Sentido del desplazamiento</h3><p class="text-xs text-slate-500">Distribución de desplazamientos por dirección</p></div>
+            <div class="flex-1 relative min-h-[220px]"><canvas id="flowChart"></canvas></div>
+          </div>
+          <div class="glass-card rounded-xl p-5 shadow-sm lg:col-span-2 flex flex-col">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 shrink-0">
+              <div><h3 class="font-bold text-slate-800">Interacción: modo, sentido y volumen</h3><p class="text-xs text-slate-500">Distribución por dirección de flujo</p></div>
+              <select id="interaction-metric" onchange="updateCharts()" class="text-xs border-slate-200 rounded p-1.5 text-slate-600 outline-none focus:border-indigo-500 bg-slate-50 font-semibold max-w-full"><option value="trips">Ver total de desplazamientos</option><option value="km">Ver kilómetros totales</option></select>
+            </div>
+            <div class="flex-1 relative min-h-[220px]"><canvas id="interactionChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="glass-card rounded-xl p-5 shadow-sm flex flex-col">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 shrink-0">
+              <div><h3 class="font-bold text-slate-800">Línea de tiempo</h3><p class="text-xs text-slate-500">Evolución de emisiones vs métrica</p></div>
+              <select id="timeline-metric" onchange="updateCharts()" class="text-xs border-slate-200 rounded p-1.5 text-slate-600 outline-none focus:border-indigo-500 bg-slate-50 font-semibold shadow-sm max-w-full"><option value="trips">Comparar: CO2 vs desplazamientos</option><option value="km">Comparar: CO2 vs kilómetros</option></select>
+            </div>
+            <div class="h-72 relative shrink-0"><canvas id="timelineChart"></canvas></div>
+          </div>
+          <div class="glass-card rounded-xl p-5 shadow-sm flex flex-col">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 shrink-0">
+              <div><h3 class="font-bold text-slate-800">Impacto por medio de transporte</h3><p class="text-xs text-slate-500">Distribución de métricas por modalidad</p></div>
+              <select id="histogram-metric" onchange="updateCharts()" class="text-xs border-slate-200 rounded p-1.5 text-slate-600 outline-none focus:border-indigo-500 bg-slate-50 font-semibold max-w-full"><option value="trips">Total de desplazamientos</option><option value="co2">Emisiones CO2</option><option value="km">Kilómetros</option></select>
+            </div>
+            <div class="h-72 relative shrink-0"><canvas id="histogramChart"></canvas></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+          <div class="glass-card rounded-xl p-5 shadow-sm flex flex-col">
+            <div class="mb-4"><h3 class="font-bold text-slate-800">Radar de sostenibilidad</h3><p class="text-xs text-slate-500">Visión integrada del desempeño modal y ambiental</p></div>
+            <div class="h-72 relative"><canvas id="radarChart"></canvas></div>
+          </div>
+          <div class="glass-card rounded-xl p-5 shadow-sm flex flex-col xl:col-span-2">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
+              <div class="flex flex-col">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2"><div><h3 class="font-bold text-slate-800">A/B: motorizados vs activos</h3><p class="text-xs text-slate-500">Comparación por grupo modal</p></div><select id="ab-mode-metric" onchange="updateCharts()" class="text-xs border-slate-200 rounded p-1.5 text-slate-600 bg-slate-50 font-semibold"><option value="trips">Viajes</option><option value="km">Kilómetros</option><option value="co2">CO2</option></select></div>
+                <div class="h-72 relative"><canvas id="abModeChart"></canvas></div>
+              </div>
+              <div class="flex flex-col">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2"><div><h3 class="font-bold text-slate-800">A/B: entrada vs salida</h3><p class="text-xs text-slate-500">Comparación territorial</p></div><select id="ab-flow-metric" onchange="updateCharts()" class="text-xs border-slate-200 rounded p-1.5 text-slate-600 bg-slate-50 font-semibold"><option value="trips">Viajes</option><option value="km">Kilómetros</option><option value="co2">CO2</option></select></div>
+                <div class="h-72 relative"><canvas id="abFlowChart"></canvas></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTe8bLYjRqZeL9Dj2yxTP7KQRq0QMM6WG76mDTUoEsGvdiCcDQjHwIvFimePU2E3NcUNfW8ArEmeKkk/pub?gid=1831834450&single=true&output=csv';
+const state = {
+  data: [], filteredData: [],
+  filters: { years: new Set(), modes: new Set(), directions: new Set() },
+  charts: {},
+  source: 'Sin datos',
+  loadStatus: 'Inicializando',
+  isUpdating: false,
+  columns: null
+};
+
+const formatNumber = (n) => new Intl.NumberFormat('es-MX', { maximumFractionDigits: 1 }).format(Number(n) || 0);
+const formatCompact = (n) => new Intl.NumberFormat('es-MX', { notation: 'compact', maximumFractionDigits: 2 }).format(Number(n) || 0);
+Chart.defaults.font.family = 'Inter, sans-serif';
+Chart.defaults.color = '#64748b';
+Chart.defaults.plugins.tooltip.callbacks.label = function(context) {
+  let label = context.dataset.label || '';
+  if (label) label += ': ';
+  let value = context.parsed && context.parsed.y !== undefined ? context.parsed.y : context.parsed;
+  return label + new Intl.NumberFormat('es-MX', { maximumFractionDigits: 2 }).format(Number(value) || 0);
+};
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeKey(value) {
+  return normalizeText(value).toLowerCase();
+}
+
+function extractYear(value) {
+  const text = normalizeText(value);
+  const match = text.match(/(19|20)\d{2}/);
+  return match ? match[0] : text;
+}
+
+function cleanNum(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (value === null || value === undefined) return 0;
+  let str = String(value).trim();
+  if (!str) return 0;
+  str = str.replace(/\s+/g, '');
+  const hasComma = str.includes(',');
+  const hasDot = str.includes('.');
+  if (hasComma && hasDot) {
+    if (str.lastIndexOf(',') > str.lastIndexOf('.')) {
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      str = str.replace(/,/g, '');
+    }
+  } else if (hasComma && !hasDot) {
+    const parts = str.split(',');
+    if (parts.length === 2 && parts[1].length <= 2) str = parts[0] + '.' + parts[1];
+    else str = str.replace(/,/g, '');
+  }
+  str = str.replace(/[^0-9.-]/g, '');
+  const parsed = parseFloat(str);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function rowHasValues(row) {
+  if (!row || typeof row !== 'object') return false;
+  return Object.values(row).some(value => normalizeText(value) !== '');
+}
+
+function firstMatchingKey(keys, patterns) {
+  return keys.find(key => patterns.some(pattern => key.includes(pattern)));
+}
+
+function detectColumns(normalizedRow) {
+  const keys = Object.keys(normalizedRow || {});
+  return {
+    yearKey: findPreferredKey(keys, ['ano', 'anio', 'year', 'fecha', 'periodo']),
+    modeKey: findPreferredKey(keys, ['modo', 'medio de transporte', 'medio', 'transporte', 'modalidad']),
+    dirKey: findPreferredKey(keys, ['sentido del desplazamiento', 'sentido', 'flujo', 'direccion', 'tipo de flujo']),
+    tripsKey: findPreferredKey(keys, ['desplazamiento', 'desplazamientos', 'total desplazamientos', 'numero de desplazamientos', 'n desplazamientos', 'viaje', 'viajes', 'trip', 'trips']),
+    kmKey: findPreferredKey(keys, ['distancia total (km)', 'distancia total km', 'distancia total', 'km total'], ['distancia de gpc (km)', 'distancia', 'km', 'kilometro', 'kilometros']),
+    co2Key: findPreferredKey(keys, ['toneladas de co2e total', 'toneladas de co2 total', 'co2e total', 'co2 total'], ['toneladas de co2e de gpc', 'toneladas', 'co2', 'emisiones', 'tco2', 'co2e'])
+  };
+}
+
+function normalizeRow(row) {
+  const normalized = {};
+  Object.keys(row || {}).forEach(key => {
+    if (!key) return;
+    normalized[normalizeKey(key)] = row[key];
+  });
+  return normalized;
+}
+
+
+function useMockData(reason) {
+  const modes = ['A PIE', 'AUTOBUS', 'AUTOMOVIL', 'BICICLETA', 'MOTO'];
+  const directions = ['DENTRO DE LOS LIMITES', 'ENTRANTES', 'SALIENTES'];
+  const mock = [];
+  for (let year = 2018; year <= 2023; year++) {
+    modes.forEach(mode => {
+      directions.forEach(direction => {
+        const baseTrips = mode === 'AUTOMOVIL' ? 10000000 : (mode === 'A PIE' ? 2000000 : 500000);
+        const trips = baseTrips * (1 + Math.random());
+        const km = trips * (mode === 'AUTOMOVIL' ? 10 : 2);
+        const co2 = (mode === 'AUTOMOVIL' || mode === 'AUTOBUS' || mode === 'MOTO') ? (km * 0.15 / 1000) : 0;
+        mock.push({ year: String(year), mode, direction, trips, km, co2 });
+      });
+    });
+  }
+  state.data = mock;
+  state.source = 'Datos simulados';
+  state.loadStatus = reason || 'Respaldo activado';
+  setDeployStatus('Modo respaldo: ' + state.loadStatus);
+}
+
+
+async function loadData() {
+  return new Promise((resolve) => {
+    Papa.parse(CSV_URL, {
+      download: true,
+      header: true,
+      dynamicTyping: false,
+      skipEmptyLines: 'greedy',
+      delimitersToGuess: [',', ';', '	', '|'],
+      complete: function(results) {
+        try {
+          const rows = (results.data || []).filter(rowHasValues);
+          if (!rows.length) {
+            useMockData('CSV sin filas válidas');
+            return resolve();
+          }
+
+          const referenceRow = normalizeRow(rows.find(rowHasValues) || rows[0] || {});
+          const columns = detectColumns(referenceRow);
+          state.columns = columns;
+
+          state.data = rows.map(rawRow => {
+            const row = normalizeRow(rawRow);
+            const year = extractYear(row[columns.yearKey] ?? 'Sin año') || 'Sin año';
+            const mode = normalizeText(row[columns.modeKey] ?? 'DESCONOCIDO').toUpperCase() || 'DESCONOCIDO';
+            const direction = normalizeText(row[columns.dirKey] ?? 'DESCONOCIDO').toUpperCase() || 'DESCONOCIDO';
+            const trips = cleanNum(row[columns.tripsKey]);
+            const km = cleanNum(row[columns.kmKey]);
+            const co2 = cleanNum(row[columns.co2Key]);
+            return { year, mode, direction, trips, km, co2 };
+          }).filter(d => {
+            const validYear = d.year && d.year !== 'Sin año';
+            const validMode = d.mode !== 'DESCONOCIDO' && d.mode !== 'TOTAL' && d.mode !== '';
+            const validDirection = d.direction !== 'DESCONOCIDO' && d.direction !== 'TOTAL' && d.direction !== '';
+            const hasMetric = d.trips > 0 || d.km > 0 || d.co2 > 0;
+            return validYear && validMode && validDirection && hasMetric;
+          });
+
+          if (!state.data.length) {
+            console.warn('CSV descargado pero sin filas procesables', { columns, sample: referenceRow, rawCount: rows.length });
+            useMockData('CSV leído, pero sin filas procesables');
+            return resolve();
+          }
+
+          state.source = 'CSV principal';
+          state.loadStatus = 'Carga exitosa';
+          setDeployStatus('Base principal conectada correctamente');
+          resolve();
+        } catch (error) {
+          console.error('Error procesando CSV:', error);
+          useMockData('Error procesando CSV');
+          resolve();
+        }
+      },
+      error: function(error) {
+        console.error('Error descargando CSV:', error);
+        useMockData('Fallo de descarga');
+        resolve();
+      }
+    });
+  });
+}
+
+function buildFiltersUI() {
+  const years = [...new Set(state.data.map(d => d.year))].sort();
+  const modes = [...new Set(state.data.map(d => d.mode))].sort();
+  const directions = [...new Set(state.data.map(d => d.direction))].sort();
+
+  state.filters.years = new Set(years);
+  state.filters.modes = new Set(modes);
+  state.filters.directions = new Set(directions);
+
+  document.getElementById('filter-years').innerHTML = years.map(year => `
+    <label class="flex items-center space-x-2 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+      <input type="checkbox" value="${year}" checked onchange="toggleFilter('years', this.value, this.checked)" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+      <span>${year}</span>
+    </label>`).join('');
+
+  document.getElementById('filter-modes').innerHTML = modes.map(mode => `
+    <label class="flex items-center space-x-2 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+      <input type="checkbox" value="${mode}" checked onchange="toggleFilter('modes', this.value, this.checked)" class="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500">
+      <span class="truncate" title="${mode}">${mode}</span>
+    </label>`).join('');
+
+  document.getElementById('filter-directions').innerHTML = directions.map(direction => `
+    <label class="flex items-center space-x-2 text-sm text-slate-600 cursor-pointer hover:text-slate-900 transition-colors">
+      <input type="checkbox" value="${direction}" checked onchange="toggleFilter('directions', this.value, this.checked)" class="rounded border-slate-300 text-sky-600 focus:ring-sky-500">
+      <span class="truncate" title="${direction}">${direction}</span>
+    </label>`).join('');
+}
+
+function toggleFilter(type, value, isChecked) {
+  const target = state.filters[type];
+  if (!target) return;
+  if (isChecked) target.add(String(value));
+  else target.delete(String(value));
+  applyFilters();
+}
+
+function resetFilters() {
+  document.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true);
+  state.filters.years = new Set([...new Set(state.data.map(d => d.year))]);
+  state.filters.modes = new Set([...new Set(state.data.map(d => d.mode))]);
+  state.filters.directions = new Set([...new Set(state.data.map(d => d.direction))]);
+  applyFilters();
+}
+
+function sumBy(list, key) {
+  return list.reduce((sum, item) => sum + (Number(item[key]) || 0), 0);
+}
+
+function initializeCharts() {
+  const axisCompact = (value) => new Intl.NumberFormat('es-MX', { notation: 'compact' }).format(value);
+  const ctx = (id) => document.getElementById(id).getContext('2d');
+
+  state.charts.timeline = new Chart(ctx('timelineChart'), {
+    type: 'line',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, boxWidth: 8 } } }, scales: { y: { type: 'linear', display: true, position: 'left', title: { display: true, text: 'CO2 (Ton)' }, ticks: { callback: axisCompact } }, y1: { type: 'linear', display: true, position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: 'Métrica' }, ticks: { callback: axisCompact } } } }
+  });
+
+  state.charts.histogram = new Chart(ctx('histogramChart'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { callback: axisCompact } }, x: { grid: { display: false } } } }
+  });
+
+  state.charts.flow = new Chart(ctx('flowChart'), {
+    type: 'doughnut',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 15 } } } }
+  });
+
+  state.charts.interaction = new Chart(ctx('interactionChart'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false }, plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, title: { display: true, text: 'Métrica' }, ticks: { callback: axisCompact } } } }
+  });
+
+  state.charts.radar = new Chart(ctx('radarChart'), {
+    type: 'radar',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, scales: { r: { beginAtZero: true, max: 100, ticks: { backdropColor: 'transparent' } } }, plugins: { legend: { display: false } } }
+  });
+
+  state.charts.abMode = new Chart(ctx('abModeChart'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { callback: axisCompact } } } }
+  });
+
+  state.charts.abFlow = new Chart(ctx('abFlowChart'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, ticks: { callback: axisCompact } } } }
+  });
+}
+
+function updateKPIs() {
+  const totalTrips = sumBy(state.filteredData, 'trips');
+  const totalKM = sumBy(state.filteredData, 'km');
+  const totalCO2 = sumBy(state.filteredData, 'co2');
+  const activeTrips = sumBy(state.filteredData.filter(d => ['A PIE', 'BICICLETA'].includes(d.mode)), 'trips');
+  const motorTrips = sumBy(state.filteredData.filter(d => ['AUTOMOVIL', 'AUTOBUS', 'MOTO'].includes(d.mode)), 'trips');
+  const inTrips = sumBy(state.filteredData.filter(d => d.direction.includes('ENTR')), 'trips');
+  const outTrips = sumBy(state.filteredData.filter(d => d.direction.includes('SAL')), 'trips');
+
+  document.getElementById('kpi-viajes').innerHTML = formatCompact(totalTrips);
+  document.getElementById('kpi-km').innerHTML = `${formatCompact(totalKM)} <span class="text-lg font-normal text-slate-500">km</span>`;
+  document.getElementById('kpi-co2').innerHTML = `${formatCompact(totalCO2)} <span class="text-lg font-normal text-slate-500">Ton</span>`;
+
+  document.getElementById('kpi-viajes').title = formatNumber(totalTrips) + ' desplazamientos exactos';
+  document.getElementById('kpi-km').title = formatNumber(totalKM) + ' km exactos';
+  document.getElementById('kpi-co2').title = formatNumber(totalCO2) + ' toneladas exactas';
+
+  document.getElementById('kpi-activa').innerText = totalTrips ? `${((activeTrips / totalTrips) * 100).toFixed(1)}%` : '0%';
+  document.getElementById('kpi-co2-mil').innerText = totalTrips ? formatNumber((totalCO2 / totalTrips) * 1000) : '0';
+  document.getElementById('kpi-balance').innerText = formatNumber(inTrips - outTrips);
+  document.getElementById('kpi-presion').innerText = totalTrips ? `${((motorTrips / totalTrips) * 100).toFixed(1)}%` : '0%';
+
+  document.getElementById('txt-activa').innerText = totalTrips ? `${((activeTrips / totalTrips) * 100).toFixed(1)}%` : '0%';
+  document.getElementById('txt-accesibilidad').innerText = totalTrips ? `${Math.max(0, Math.min(100, 50 + ((inTrips - outTrips) / Math.max(1, totalTrips)) * 100)).toFixed(1)} / 100` : '0 / 100';
+  document.getElementById('txt-desacople').innerText = totalTrips ? ((totalCO2 / totalTrips) * 1000).toFixed(2) : '0';
+  document.getElementById('txt-balance').innerText = formatNumber(inTrips - outTrips);
+}
+
+function updateAnalysisText() {
+  if (!state.filteredData.length) {
+    document.getElementById('txt-modo-dominante').innerText = 'Sin datos';
+    document.getElementById('txt-flujo-principal').innerText = 'Sin datos';
+    document.getElementById('txt-promedio-km').innerText = '0';
+    document.getElementById('txt-co2-por-viaje').innerText = '0';
+    return;
+  }
+
+  const tripsByMode = {};
+  const tripsByDir = {};
+  state.filteredData.forEach(d => {
+    tripsByMode[d.mode] = (tripsByMode[d.mode] || 0) + d.trips;
+    tripsByDir[d.direction] = (tripsByDir[d.direction] || 0) + d.trips;
+  });
+
+  const modeKeys = Object.keys(tripsByMode);
+  const dirKeys = Object.keys(tripsByDir);
+  const modeDominant = modeKeys.reduce((a, b) => tripsByMode[a] > tripsByMode[b] ? a : b, modeKeys[0]);
+  const dirDominant = dirKeys.reduce((a, b) => tripsByDir[a] > tripsByDir[b] ? a : b, dirKeys[0]);
+  const totalTrips = sumBy(state.filteredData, 'trips');
+  const totalKM = sumBy(state.filteredData, 'km');
+  const totalCO2 = sumBy(state.filteredData, 'co2');
+
+  document.getElementById('txt-modo-dominante').innerText = modeDominant || 'N/A';
+  document.getElementById('txt-flujo-principal').innerText = dirDominant || 'N/A';
+  document.getElementById('txt-promedio-km').innerText = totalTrips ? (totalKM / totalTrips).toFixed(2) : '0';
+  document.getElementById('txt-co2-por-viaje').innerText = totalTrips ? formatCompact((totalCO2 / totalTrips) * 1000000) : '0';
+}
+
+function updateCharts() {
+  if (state.isUpdating || !state.charts.timeline) return;
+  state.isUpdating = true;
+  try {
+    const years = [...state.filters.years].sort();
+    const directions = [...state.filters.directions];
+    const modes = [...state.filters.modes];
+
+    const timelineMetric = document.getElementById('timeline-metric').value;
+    const histogramMetric = document.getElementById('histogram-metric').value;
+    const interactionMetric = document.getElementById('interaction-metric').value;
+    const abModeMetric = document.getElementById('ab-mode-metric').value;
+    const abFlowMetric = document.getElementById('ab-flow-metric').value;
+
+    const co2ByYear = years.map(y => sumBy(state.filteredData.filter(d => d.year === y), 'co2'));
+    const tripsByYear = years.map(y => sumBy(state.filteredData.filter(d => d.year === y), 'trips'));
+    const kmByYear = years.map(y => sumBy(state.filteredData.filter(d => d.year === y), 'km'));
+
+    state.charts.timeline.data = {
+      labels: years,
+      datasets: [
+        { label: 'Emisiones CO2 (Ton)', data: co2ByYear, borderColor: '#f43f5e', backgroundColor: 'rgba(244,63,94,.1)', borderWidth: 2, tension: .3, fill: true, yAxisID: 'y' },
+        { type: timelineMetric === 'trips' ? 'bar' : 'line', label: timelineMetric === 'trips' ? 'Total Desplazamientos' : 'Kilómetros Totales', data: timelineMetric === 'trips' ? tripsByYear : kmByYear, backgroundColor: timelineMetric === 'trips' ? 'rgba(99,102,241,.5)' : 'transparent', borderColor: timelineMetric === 'trips' ? '#6366f1' : '#f59e0b', borderDash: timelineMetric === 'km' ? [5,5] : [], borderWidth: 2, tension: .3, yAxisID: 'y1', borderRadius: 4 }
+      ]
+    };
+    state.charts.timeline.options.scales.y1.title.text = timelineMetric === 'trips' ? 'Total Desplazamientos' : 'Kilómetros Totales';
+    state.charts.timeline.update();
+
+    const metricMap = {
+      trips: { key: 'trips', color: '#6366f1', label: 'Total de Desplazamientos' },
+      km: { key: 'km', color: '#10b981', label: 'Kilómetros Recorridos' },
+      co2: { key: 'co2', color: '#f43f5e', label: 'Emisiones CO2 (Ton)' }
+    };
+    const histConfig = metricMap[histogramMetric];
+    const histogramData = modes.map(mode => ({ mode, value: sumBy(state.filteredData.filter(d => d.mode === mode), histConfig.key) })).sort((a, b) => b.value - a.value);
+    state.charts.histogram.data = { labels: histogramData.map(d => d.mode), datasets: [{ label: histConfig.label, data: histogramData.map(d => d.value), backgroundColor: histConfig.color, borderRadius: 4 }] };
+    state.charts.histogram.update();
+
+    const tripsByDirection = directions.map(direction => sumBy(state.filteredData.filter(d => d.direction === direction), 'trips'));
+    state.charts.flow.data = { labels: directions, datasets: [{ data: tripsByDirection, backgroundColor: ['#0ea5e9', '#8b5cf6', '#14b8a6', '#f43f5e'], borderWidth: 0, hoverOffset: 4 }] };
+    state.charts.flow.update();
+
+    const stackColors = ['#38bdf8', '#a78bfa', '#34d399', '#fb7185'];
+    state.charts.interaction.data = {
+      labels: modes,
+      datasets: directions.map((direction, idx) => ({ label: direction, data: modes.map(mode => sumBy(state.filteredData.filter(d => d.mode === mode && d.direction === direction), interactionMetric)), backgroundColor: stackColors[idx % stackColors.length], borderRadius: 4 }))
+    };
+    state.charts.interaction.options.scales.y.title.text = interactionMetric === 'trips' ? 'Total de Desplazamientos' : 'Kilómetros Totales';
+    state.charts.interaction.update();
+
+    const totalTrips = sumBy(state.filteredData, 'trips');
+    const totalCO2 = sumBy(state.filteredData, 'co2');
+    const activeShare = totalTrips ? (sumBy(state.filteredData.filter(d => ['A PIE', 'BICICLETA'].includes(d.mode)), 'trips') / totalTrips) * 100 : 0;
+    const motorShare = totalTrips ? (sumBy(state.filteredData.filter(d => ['AUTOMOVIL', 'AUTOBUS', 'MOTO'].includes(d.mode)), 'trips') / totalTrips) * 100 : 0;
+    const efficiency = totalTrips ? Math.max(0, 100 - ((totalCO2 / totalTrips) * 1000)) : 0;
+    const territorial = totalTrips ? Math.max(0, Math.min(100, 50 + ((sumBy(state.filteredData.filter(d => d.direction.includes('ENTR')), 'trips') - sumBy(state.filteredData.filter(d => d.direction.includes('SAL')), 'trips')) / totalTrips) * 100)) : 0;
+    const accessibility = totalTrips ? Math.max(0, Math.min(100, 50 + ((sumBy(state.filteredData.filter(d => d.direction.includes('ENTR')), 'trips') - sumBy(state.filteredData.filter(d => d.direction.includes('SAL')), 'trips')) / totalTrips) * 100)) : 0;
+
+    state.charts.radar.data = {
+      labels: ['Movilidad activa', 'Presión motorizada inversa', 'Eficiencia ambiental', 'Equilibrio territorial', 'Accesibilidad'],
+      datasets: [{ data: [activeShare, 100 - motorShare, Math.max(0, Math.min(100, efficiency)), territorial, accessibility], borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.18)', pointBackgroundColor: '#2563eb' }]
+    };
+    state.charts.radar.update();
+
+    const motorizados = state.filteredData.filter(d => ['AUTOMOVIL', 'AUTOBUS', 'MOTO'].includes(d.mode));
+    const activos = state.filteredData.filter(d => ['A PIE', 'BICICLETA'].includes(d.mode));
+    state.charts.abMode.data = { labels: ['Motorizados', 'Activos'], datasets: [{ label: histogramMetric === 'trips' ? 'Comparativo' : 'Comparativo', data: [sumBy(motorizados, abModeMetric), sumBy(activos, abModeMetric)], backgroundColor: ['#f43f5e', '#10b981'], borderRadius: 6 }] };
+    state.charts.abMode.update();
+
+    const entrantes = state.filteredData.filter(d => d.direction.includes('ENTR'));
+    const salientes = state.filteredData.filter(d => d.direction.includes('SAL'));
+    state.charts.abFlow.data = { labels: ['Entrantes', 'Salientes'], datasets: [{ label: 'Comparativo', data: [sumBy(entrantes, abFlowMetric), sumBy(salientes, abFlowMetric)], backgroundColor: ['#6366f1', '#f59e0b'], borderRadius: 6 }] };
+    state.charts.abFlow.update();
+  } finally {
+    state.isUpdating = false;
+  }
+}
+
+function applyFilters() {
+  state.filteredData = state.data.filter(d => state.filters.years.has(d.year) && state.filters.modes.has(d.mode) && state.filters.directions.has(d.direction));
+  updateKPIs();
+  updateAnalysisText();
+  updateCharts();
+}
+
+async function initDashboard() {
+  try {
+    await loadData();
+    buildFiltersUI();
+    initializeCharts();
+    applyFilters();
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('dashboard-content').classList.remove('hidden');
+    addInsightTooltips();
+    setupAutoRefresh();
+    setLastUpdated();
+    setDeployStatus(state.source === 'CSV principal' ? 'Base principal conectada correctamente' : 'Modo respaldo activo');
+  } catch (error) {
+    console.error('Error inicializando observatorio:', error);
+    document.getElementById('loading').innerHTML = '<div class="text-red-500 text-center"><i class="fa-solid fa-triangle-exclamation text-4xl mb-2"></i><p>Error al inicializar el tablero.</p></div>';
+  }
+}
+
+
+function setDeployStatus(message) { const el = document.getElementById('deploy-status'); if (el) el.innerText = message; }
+
+function setLastUpdated() {
+  const now = new Date();
+  const formatted = now.toLocaleString('es-MX', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  const el = document.getElementById('last-updated');
+  if (el) el.innerText = formatted;
+}
+
+function findPreferredKey(keys, preferredPatterns, fallbackPatterns = []) {
+  for (const pattern of preferredPatterns) {
+    const found = keys.find(key => key.includes(pattern));
+    if (found) return found;
+  }
+  for (const pattern of fallbackPatterns) {
+    const found = keys.find(key => key.includes(pattern));
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function addInsightTooltips() {
+  const tips = {
+    'kpi-viajes': { title: 'Total de Desplazamientos', text: 'Suma todos los registros del campo de desplazamientos dentro de los filtros activos. Sirve para medir demanda total de movilidad y presión general sobre el sistema vial.' },
+    'kpi-km': { title: 'Kilómetros Recorridos', text: 'Agrega la distancia total recorrida por todos los viajes filtrados. Ayuda a estimar intensidad territorial, consumo energético y exposición potencial a emisiones.' },
+    'kpi-co2': { title: 'Emisiones de CO2', text: 'Suma las toneladas de CO2e reportadas en la base. Se usa para evaluar la huella climática del sistema y comparar escenarios o periodos.' },
+    'txt-modo-dominante': { title: 'Medios y combustibles', text: 'Identifica el modo con mayor volumen de desplazamientos. Permite reconocer qué modalidad domina la movilidad urbana y dónde conviene focalizar políticas públicas.' },
+    'txt-flujo-principal': { title: 'Dirección de los flujos', text: 'Compara el volumen de viajes por sentido y resalta el flujo dominante. Sirve para interpretar si la ciudad atrae o expulsa viajes en el periodo observado.' },
+    'txt-promedio-km': { title: 'Volumen de desplazamientos', text: 'Divide kilómetros totales entre desplazamientos totales. Es útil para entender la longitud promedio del viaje y distinguir movilidad local de trayectos más extensos.' },
+    'txt-co2-por-viaje': { title: 'Eficiencia de emisiones', text: 'Calcula CO2 por millón de desplazamientos a partir de CO2 total y viajes totales. Permite comparar eficiencia ambiental entre filtros sin depender del volumen absoluto.' },
+    'kpi-activa': { title: 'Índice de movilidad activa', text: 'Mide la participación de viajes a pie y en bicicleta sobre el total. Sirve para valorar salud urbana, sostenibilidad y necesidad de infraestructura activa.' },
+    'kpi-co2-mil': { title: 'CO2 por 1,000 viajes', text: 'Normaliza las emisiones para compararlas entre años, modos o sentidos con distinto volumen. Ayuda a detectar si el sistema se vuelve más limpio o más intensivo en carbono.' },
+    'kpi-balance': { title: 'Balance entrada / salida', text: 'Resta viajes salientes a viajes entrantes. Es un indicador rápido de centralidad funcional y de atracción urbana.' },
+    'kpi-presion': { title: 'Presión vial motorizada', text: 'Mide el peso de automóvil, moto y autobús sobre el total. Sirve para estimar presión sobre la red vial y dependencia de modos motorizados.' },
+    'txt-accesibilidad': { title: 'Accesibilidad urbana', text: 'Integra el balance funcional en un índice sintético de lectura rápida. Ayuda a comunicar si la ciudad está captando o perdiendo movilidad respecto a su entorno.' },
+    'txt-activa': { title: 'Movilidad activa', text: 'Refuerza la lectura del índice de movilidad activa con un valor operativo. Es útil para narrar beneficios ambientales y de salud pública.' },
+    'txt-desacople': { title: 'Desacople ambiental', text: 'Relaciona emisiones y desplazamientos para ver si crece la movilidad sin crecer el CO2 al mismo ritmo. Sirve para vigilar eficiencia ambiental del sistema.' },
+    'txt-balance': { title: 'Equilibrio territorial', text: 'Expresa el saldo funcional del municipio bajo el filtro actual. Ayuda a interpretar si Delicias funciona como polo atrayente o expulsor de movilidad.' },
+    'flowChart': { title: 'Sentido del desplazamiento', text: 'La dona resume cómo se distribuyen los viajes por dirección. Sirve para detectar asimetrías territoriales y apoyar decisiones de conectividad.' },
+    'interactionChart': { title: 'Interacción: modo, sentido y volumen', text: 'Cruza modalidad y dirección con desplazamientos o kilómetros. Permite identificar qué combinaciones generan mayor presión territorial.' },
+    'timelineChart': { title: 'Línea de tiempo', text: 'Compara la evolución anual de CO2 frente a desplazamientos o kilómetros. Sirve para detectar tendencias, rupturas y cambios estructurales.' },
+    'histogramChart': { title: 'Impacto por medio de transporte', text: 'Ordena los modos según la métrica elegida. Ayuda a priorizar intervenciones en las modalidades con mayor peso operativo o ambiental.' },
+    'radarChart': { title: 'Radar de sostenibilidad', text: 'Integra varios indicadores en una sola vista comparativa. Sirve para comunicar equilibrio entre movilidad activa, presión motorizada y eficiencia ambiental.' },
+    'abModeChart': { title: 'A/B: motorizados vs activos', text: 'Contrasta dos grandes grupos modales con la métrica seleccionada. Es útil para mostrar de forma ejecutiva el peso ambiental y operativo de cada grupo.' },
+    'abFlowChart': { title: 'A/B: entrada vs salida', text: 'Compara viajes, kilómetros o CO2 entre entradas y salidas. Ayuda a explicar el papel funcional de la ciudad dentro del sistema regional.' }
+  };
+
+  const attach = (anchor, info) => {
+    if (!anchor || !info) return;
+    const wrap = anchor.closest('.glass-card') || anchor.parentElement;
+    if (!wrap || wrap.querySelector('.insight-btn')) return;
+    wrap.classList.add('insight-wrap');
+    const btn = document.createElement('button');
+    btn.className = 'insight-btn';
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Explicación técnica');
+    btn.innerHTML = '<i class="fa-solid fa-lightbulb"></i>';
+    const pop = document.createElement('div');
+    pop.className = 'insight-pop';
+    pop.innerHTML = `<div style="font-weight:700;margin-bottom:6px;color:#fde68a;">${info.title}</div><div>${info.text}</div>`;
+    wrap.appendChild(btn);
+    wrap.appendChild(pop);
+    btn.addEventListener('mouseenter', () => { pop.dataset.open = 'true'; });
+    btn.addEventListener('mouseleave', () => { if (!pop.matches(':hover')) pop.dataset.open = 'false'; });
+    pop.addEventListener('mouseleave', () => { pop.dataset.open = 'false'; });
+  };
+
+  Object.entries(tips).forEach(([id, info]) => attach(document.getElementById(id), info));
+}
+
+function setupAutoRefresh() {
+  let refreshTimer = null;
+  const toggle = document.getElementById('auto-refresh-toggle');
+  const button = document.getElementById('refresh-now-btn');
+  const activate = () => {
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (toggle && toggle.checked) {
+      refreshTimer = setInterval(async () => {
+        await refreshDataSilently();
+      }, 300000);
+    }
+  };
+  const refreshNow = async () => {
+    if (button) {
+      button.disabled = true;
+      button.innerHTML = '<i class="fa-solid fa-spinner fa-spin mr-2"></i>Actualizando';
+    }
+    await refreshDataSilently();
+    if (button) {
+      button.disabled = false;
+      button.innerHTML = '<i class="fa-solid fa-rotate mr-2"></i>Actualizar ahora';
+    }
+  };
+  if (toggle) toggle.addEventListener('change', activate);
+  if (button) button.addEventListener('click', refreshNow);
+  activate();
+}
+
+async function refreshDataSilently() {
+  const previousSource = state.source;
+  await loadData();
+  buildFiltersUI();
+  applyFilters();
+  setLastUpdated();
+  state.source = previousSource === 'CSV principal' || state.source === 'CSV principal' ? state.source : previousSource;
+}
+
+document.addEventListener('DOMContentLoaded', initDashboard, { once: true });
+</script>
+</body>
+</html>
