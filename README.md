@@ -117,7 +117,7 @@ Mejoras recomendadas para próximas versiones:
 - añadir metadatos institucionales, logotipo y créditos técnicos.
 
 ## Créditos
-Desarrollo, integración y adaptación del observatorio para análisis urbano y ambiental orientado a IMPLAN Delicias.
+Desarrollo, integración y adaptación del observatorio por Alonso Villalobos Lara
 
 ## Licencia
-Define aquí la licencia que quieras usar para el proyecto, por ejemplo MIT, Apache-2.0 o una licencia institucional interna.
+MIT, Apache-2.0
